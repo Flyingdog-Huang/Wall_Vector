@@ -53,17 +53,32 @@ def filterConts(contours, eps=1):
     
     return contours
 
+def drawDT(img,cnts,color):
+    t_list=cnts.getTriangleList()
+    for t in t_list:
+        p1=(t[0],t[1])
+        p2=(t[2],t[3])
+        p3=(t[4],t[5])
+        cv2.line(img,p1,p2,color,2)
+        cv2.line(img,p2,p3,color,2)
+        cv2.line(img,p3,p1,color,2)
+
 
 name='1_pre.png'
-img=cv2.imread('../../data/'+name)
+img=cv2.imread('../data/predict/'+name)
 img_c, img_o=preprocess(img)
 
-''''''
+
 cnts=findConts(img_c)
 print(len(cnts))
 cnts_f=filterConts(cnts)
 print(len(cnts_f))
 
+subdiv=[]
+for cnt in cnts_f:
+    subdiv.
+
+'''
 img_nf=img.copy()
 img_f=img.copy()
 cv2.drawContours(img_f,cnts_f,-1, (0, 0, 255), 3)
@@ -77,6 +92,6 @@ img_nf=cv2.resize(img_nf,(512,512))
 img_f=cv2.resize(img_f,(512,512))
 cv2.imshow('filter',img_f)
 cv2.imshow('no filter',img_nf)
-
+'''
 
 cv2.waitKey(0)
