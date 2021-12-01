@@ -53,9 +53,14 @@ def filterConts(contours, eps=1):
     
     return contours
 
-def drawDT(img,cnts,color):
-    t_list=cnts.getTriangleList()
+def findCrossPoint(cnts):
+    for cnt
+
+
+def drawDT(img, subdiv,color):
+    t_list= subdiv.getTriangleList()
     for t in t_list:
+        print('t',t)
         p1=(t[0],t[1])
         p2=(t[2],t[3])
         p3=(t[4],t[5])
@@ -63,20 +68,34 @@ def drawDT(img,cnts,color):
         cv2.line(img,p2,p3,color,2)
         cv2.line(img,p3,p1,color,2)
 
+path= '../data/' # '../data/predict/'
+name='1_mask.png'
+img=cv2.imread(path+name)
+img_orig = img.copy()
+size = img.shape
+rect = (0,0,size[1],size[0])
 
-name='1_pre.png'
-img=cv2.imread('../data/predict/'+name)
 img_c, img_o=preprocess(img)
-
 
 cnts=findConts(img_c)
 print(len(cnts))
 cnts_f=filterConts(cnts)
 print(len(cnts_f))
 
-subdiv=[]
+img_copy=img_orig.copy()
 for cnt in cnts_f:
-    subdiv.
+    print('cnt',cnt)
+    subdiv = cv2.Subdiv2D(rect)
+    for p in cnt:
+        print('p',p)
+        subdiv.insert(p)
+        img_p_copy=img_orig.copy()
+        drawDT(img_copy,subdiv,(0,0,255))
+        drawDT(img_p_copy,subdiv,(0,255,0))
+        # cv2.imshow("Delaunay Triangulation",img_p_copy)
+        # cv2.waitKey(100)
+
+cv2.imshow("Delaunay Triangulation",img_copy)
 
 '''
 img_nf=img.copy()
