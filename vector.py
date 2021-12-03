@@ -1,17 +1,18 @@
 import cv2
 import numpy as np
 
-def preprocess(img):
-    img_g=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)#灰化
-    ret,img_b=cv2.threshold(img_g,127,255,cv2.THRESH_BINARY)#二值化
-    k=5
-    kernel=cv2.getStructuringElement(cv2.MORPH_RECT,(k,k))# 定义核结构
-    it=3
+def close_operate(img_b,k=5,it=3):
     # 膨胀=>腐蚀(闭运算)——充填空隙
+    kernel=cv2.getStructuringElement(cv2.MORPH_RECT,(k,k))# 定义核结构
     img_c=cv2.morphologyEx(img_b, cv2.MORPH_CLOSE, kernel, iterations=it)
+    return img_c
+
+def binary_process(img):
+    img_g=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)#灰化
+    _,img_b=cv2.threshold(img_g,127,255,cv2.THRESH_BINARY)#二值化
     # 腐蚀=>膨胀(开运算)——去噪
-    img_o=cv2.morphologyEx(img_b, cv2.MORPH_OPEN, kernel, iterations=it)
-    return img_c, img_o
+    # img_o=cv2.morphologyEx(img_b, cv2.MORPH_OPEN, kernel, iterations=it)
+    return img_b
 
 
 def findConts(img):
@@ -65,8 +66,8 @@ def drawDT(img,cnts,color):
 
 
 name='1_pre.png'
-img=cv2.imread('../data/predict/'+name)
-img_c, img_o=preprocess(img)
+img=cv2.imread('./predict/'+name)
+img_b=binary_process(img)
 
 
 cnts=findConts(img_c)
@@ -74,11 +75,15 @@ print(len(cnts))
 cnts_f=filterConts(cnts)
 print(len(cnts_f))
 
+for cnt in cnts_f:
+    print(cnt)
+
+'''
 subdiv=[]
 for cnt in cnts_f:
     subdiv.
 
-'''
+
 img_nf=img.copy()
 img_f=img.copy()
 cv2.drawContours(img_f,cnts_f,-1, (0, 0, 255), 3)
