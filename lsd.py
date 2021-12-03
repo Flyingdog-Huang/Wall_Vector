@@ -37,8 +37,14 @@ for dline in lines_lsd:
 img_fastLSD=img_pre.copy()
 img_fastLSD=lsd_dec.drawSegments(img_fastLSD,lines_fastLSD)
 
-cv2.imshow('gray',img_gray)
-cv2.imshow('houghp',img_houghp)
-cv2.imshow('fast LSD',img_fastLSD)
-cv2.imshow('LSD',img_lsd)
-cv2.waitKey(0)
+# filter lines
+# print(lines_fastLSD.shape)
+for line in lines_fastLSD:
+    print(line[0])
+
+
+# cv2.imshow('gray',img_gray)
+# cv2.imshow('houghp',img_houghp)
+# cv2.imshow('fast LSD',img_fastLSD)
+# cv2.imshow('LSD',img_lsd)
+# cv2.waitKey(0)
