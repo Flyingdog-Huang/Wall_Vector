@@ -68,35 +68,57 @@ def drawDT(img,cnts,color):
 name='1_pre.png'
 img=cv2.imread('./predict/'+name)
 img_b=binary_process(img)
-
+img_c=close_operate(img_b)
 
 cnts=findConts(img_c)
-print(len(cnts))
+# print(cnts)
+# print(len(cnts))
 cnts_f=filterConts(cnts)
-print(len(cnts_f))
-
-for cnt in cnts_f:
-    print(cnt)
-
+# print(len(cnts_f))
 '''
+for cnt in cnts_f:
+    
+    print(cnt)
+    print(cnt.shape)
+    print(type(cnt))
+    print(cv2.contourArea(cnt))
+
+points=[[0,0],[1,0],[1,1],[0,1]]
+points=np.array(points)
+points=points[:,np.newaxis,:]
+print(points.shape)
+print(cv2.contourArea(points))
+
+
+
 subdiv=[]
 for cnt in cnts_f:
     subdiv.
 
-
-img_nf=img.copy()
-img_f=img.copy()
-cv2.drawContours(img_f,cnts_f,-1, (0, 0, 255), 3)
-cv2.drawContours(img_nf,cnts,-1, (0, 0, 255), 3)
-
-img_c=cv2.resize(img_c,(512,512))
-img_o=cv2.resize(img_o,(512,512))
-cv2.imshow('close',img_c)
-cv2.imshow('open',img_o)
-img_nf=cv2.resize(img_nf,(512,512))
-img_f=cv2.resize(img_f,(512,512))
-cv2.imshow('filter',img_f)
-cv2.imshow('no filter',img_nf)
 '''
+
+rec1=[[100,100],[400,500],[440,470],[140,70]]
+rec1=np.array(rec1)[:,np.newaxis,:]
+img_test=img.copy()
+cv2.drawContours(img_test,rec1[np.newaxis,:,:,:],0, (0,255,0), 1)
+cv2.imshow('test',img_test)
+
+
+# img_nf=img.copy()
+# img_f=img.copy()
+# cv2.drawContours(img_f,cnts_f,2, (0, 0, 255), 1)
+# cv2.drawContours(img_nf,cnts,2, (0, 0, 255), 1)
+
+# img_c=cv2.resize(img_c,(512,512))
+# img_o=cv2.resize(img_o,(512,512))
+# cv2.imshow('close',img_c)
+# cv2.imshow('open',img_o)
+
+# img_nf=cv2.resize(img_nf,(512,512))
+# img_f=cv2.resize(img_f,(512,512))
+
+# cv2.imshow('filter',img_f)
+# cv2.imshow('no filter',img_nf)
+
 
 cv2.waitKey(0)
