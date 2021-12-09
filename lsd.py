@@ -192,6 +192,9 @@ for line in lines_fastLSD:
         wall_lines.append(wall_line)
         # print('wall-line',line)
 
+        # # draw wall lines
+        # cv2.line(img_wall, (x2, y2), (x1,y1),(0,0,255), 1)
+
         # get direction
         direc_line=[x1,y1,x5,y5] if mask1_p>mask2_p else [x1,y1,x3,y3]
         direc_lines.append(direc_line)
@@ -217,8 +220,8 @@ for line in lines_fastLSD:
         # print('k',k)
 
         # bool wall direction
-        # t1=1 if mask2_p>mask1_p else -1
-        # t2=1 if mask1_p>mask2_p else -1
+        t1=1 if mask2_p>mask1_p else -1
+        t2=1 if mask1_p>mask2_p else -1
         
         # k color
         # a_k_color=int(255*3*(k-min_k)/(max_k-min_k))
@@ -296,8 +299,8 @@ for line in lines_fastLSD:
 
 
         # draw wall direction area
-        # cv2.drawContours(img_wall,rec1[np.newaxis,:,:,:],0, (0,255,0), t1)
-        # cv2.drawContours(img_wall,rec2[np.newaxis,:,:,:],0, (0,255,0), t2)
+        cv2.drawContours(img_wall,rec1[np.newaxis,:,:,:],0, (0,255,0), t1)
+        cv2.drawContours(img_wall,rec2[np.newaxis,:,:,:],0, (0,255,0), t2)
 
         # draw line
         # cv2.line(img_wall, (x2, y2), (x1,y1), (0,0,255), 2, cv2.LINE_AA)
@@ -327,14 +330,19 @@ for line in lines_fastLSD:
 # print('k_lines',k_lines)
 
  
-# 探测区域长度
-l_d=20
+l_d=20 # 探测区域长度
+new_line_map=np.zeros((y,x),np.uint16) # save new no(1,2,3...) of wall line, 0-not wall
 # create k map
 for i in range(len(wall_lines)):
     x1,y1,x2,y2=wall_lines[i]
     k_line=k_lines[i]
     x1,y1,x_d,y_d=direc_lines[i]
+
+    # draw wall lines
+    cv2.line(img_wall, (x2, y2), (x1,y1),(0,0,255), 1)
     # cv2.line(img_wall, (x2, y2), (x1,y1), (0,0,255), 2, cv2.LINE_AA)
+
+    new_no=i+1
 
     # draw line flag on line map
     line_flg=np.zeros((y,x),np.uint8)
@@ -367,22 +375,24 @@ for i in range(len(wall_lines)):
                         if x_k<0:x_k=0
                         if x_k>=x:x_k=x-1
                         # print('x_k',x_k)
-                        if img_bool[y_line,x_k]==1 or line_map[y_line,x_k]>0:
-                            is_line=1
+                        if line_map[y_line,x_k]>0 or img_bool[y_line,x_k]==1:
+                            # is_line=1
                             for dddx in range(ddx+1):
                                 dx_k=x_line+k_direc*dddx
                                 if dx_k<0:dx_k=0
                                 if dx_k>=x:dx_k=x-1
-                                # 如果是空，直接充填
-                                if line_map[y_line,dx_k]==0:                                    
+                                if line_map[y_line,x_k]>0 and K_map[y_line,x_k]!=0:
+                                    is_line=1                                     
                                     K_map[y_line,dx_k]=6
-                                    line_map[y_line,dx_k]=i+1
-                                else:
-                                    if K_map[y_line,dx_k]>=5.67 or K_map[y_line,dx_k]<=-5.67:                                        
-                                        K_map[y_line,dx_k]=6
-                                        line_map[y_line,dx_k]=i+1
-                    if is_line==0:
-                        line_map[y_line,x_line]=0
+                                    # line_map[y_line,dx_k]=new_no
+                                    new_line_map[y_line,dx_k]=new_no
+                                elif  img_bool[y_line,x_k]==1 and new_line_map[y_line,dx_k]==0:
+                                    is_line=1                       
+                                    K_map[y_line,dx_k]=6
+                                    # line_map[dy_k,x_line]=new_no
+                                    new_line_map[y_line,dx_k]=new_no 
+                    if is_line==1:
+                        new_line_map[y_line,x_line]=new_no
 
     # 水平
     elif y1==y2:
@@ -395,24 +405,24 @@ for i in range(len(wall_lines)):
                         y_k=y_line+k_direc*ddy
                         if y_k<0:y_k=0
                         if y_k>=y:y_k=y-1
-                        if img_bool[y_k,x_line]==1 or line_map[y_k,x_line]>0:
-                            is_line=1
+                        if line_map[y_k,x_line]>0 or img_bool[y_k,x_line]==1:
                             for dddy in range(ddy+1):
                                 dy_k=y_line+k_direc*dddy
                                 if dy_k<0:dy_k=0
                                 if dy_k>=y:dy_k=y-1
-                                # 如果是空，直接充填
-                                if line_map[dy_k,x_line]==0:                                    
+                                if line_map[y_k,x_line]>0 and K_map[y_k,x_line]!=6 and K_map[y_k,x_line]!=-6:
+                                    is_line=1                       
                                     K_map[dy_k,x_line]=0
-                                    line_map[dy_k,x_line]=i+1
-                                else:
-                                    if K_map[dy_k,x_line]>=-0.18 and K_map[dy_k,x_line]<=0.18:                                        
-                                        K_map[dy_k,x_line]=0
-                                        line_map[dy_k,x_line]=i+1
-                    if is_line==0:
-                        line_map[y_line,x_line]=0
-
-
+                                    # line_map[dy_k,x_line]=new_no
+                                    new_line_map[dy_k,x_line]=new_no            
+                                elif  img_bool[y_k,x_line]==1 and new_line_map[dy_k,x_line]==0:
+                                    is_line=1                       
+                                    K_map[dy_k,x_line]=0
+                                    # line_map[dy_k,x_line]=new_no
+                                    new_line_map[dy_k,x_line]=new_no 
+                    if is_line==1:
+                        new_line_map[y_line,x_line]=new_no
+    # 斜边扩展
     else:
         pass
 
@@ -423,7 +433,7 @@ color_r=[0,0,255] # K:2_6
 for i in range(x):
     for j in range(y):
         color=[0,0,0]
-        if line_map[j][i]>0:
+        if new_line_map[j][i]>0:
             if K_map[j][i]<-2:
                 color=color_b
             elif K_map[j][i]>=-2 and K_map[j][i]<=2:
@@ -440,7 +450,7 @@ for i in range(x):
 # cv2.imshow('fast LSD',img_fastLSD)
 # cv2.imshow('LSD',img_lsd)
 # cv2.imshow('img_bool',img_bool)
-# cv2.imshow('wall-line',img_wall)
 '''
+cv2.imshow('wall-line',img_wall)
 cv2.imshow('K_feature_map',K_feature_map)
 cv2.waitKey(0)
