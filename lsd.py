@@ -349,82 +349,154 @@ for i in range(len(wall_lines)):
     cv2.line(line_flg, (x2, y2), (x1,y1),1, 1)
 
     # 分为：水平、垂直和其他情况分类处理
-    y_min=y1
-    y_max=y2
-    if y1>y2:
-        y_min=y2
-        y_max=y1
-    # dy=y_max-y_min+1
-    x_min=x1
-    x_max=x2
-    if x1>x2:
-        x_min=x2
-        x_max=x1
-    # dx=x_max-x_min+1
+    # ROI区域
+    y_min=min(y1,y2)
+    y_max=max(y1,y2)
+    
+    x_min=min(x1,x2)
+    x_max=max(x1,x2)
+    
 
-    # 垂直
+    # 垂直扩展
     if x1==x2:
         k_direc=1 if x_d>x1 else -1
         for y_line in range(y_min,y_max+1):
             for x_line in range(x_min,x_max+1):
                 # x=x_min+k_direc*ddx
                 if line_flg[y_line,x_line]==1:
-                    is_line=0
-                    for ddx in range(1,l_d):
+                    is_line=0# 是否标记此点为wall line
+                    # 探测阶段
+                    for ddx in range(1,l_d+1):
                         x_k=x_line+k_direc*ddx
-                        if x_k<0:x_k=0
-                        if x_k>=x:x_k=x-1
+                        if x_k<0 or x_k>=x: break
                         # print('x_k',x_k)
                         if line_map[y_line,x_k]>0 or img_bool[y_line,x_k]==1:
                             # is_line=1
-                            for dddx in range(ddx+1):
+                            # 充填阶段
+                            for dddx in range(1,ddx+1):
                                 dx_k=x_line+k_direc*dddx
-                                if dx_k<0:dx_k=0
-                                if dx_k>=x:dx_k=x-1
-                                if line_map[y_line,x_k]>0 and K_map[y_line,x_k]!=0:
-                                    is_line=1                                     
-                                    K_map[y_line,dx_k]=6
-                                    # line_map[y_line,dx_k]=new_no
-                                    new_line_map[y_line,dx_k]=new_no
-                                elif  img_bool[y_line,x_k]==1 and new_line_map[y_line,dx_k]==0:
-                                    is_line=1                       
-                                    K_map[y_line,dx_k]=6
-                                    # line_map[dy_k,x_line]=new_no
-                                    new_line_map[y_line,dx_k]=new_no 
+                                if line_map[y_line,x_k]>0:
+                                    # 如果端点直线K相似，直接充填
+                                    if K_map[y_line,x_k]>=5.67 or K_map[y_line,x_k]<=-5.64 :
+                                        is_line=1                                     
+                                        K_map[y_line,dx_k]=6
+                                        new_line_map[y_line,dx_k]=new_no
+                                        continue
+                                # 如果是预测墙体区域
+                                if img_bool[y_line,x_k]==1:
+                                    # 如果是未生长区域，直接充填
+                                    if new_line_map[y_line,dx_k]==0 :
+                                        is_line=1                                     
+                                        K_map[y_line,dx_k]=6
+                                        new_line_map[y_line,dx_k]=new_no
+                                        continue
+                                    # 如果是生长区域，K相似时可以充填
+                                    else:
+                                        if K_map[y_line,dx_k]>=6 or K_map[y_line,dx_k]<=-6 :
+                                            is_line=1                                     
+                                            K_map[y_line,dx_k]=6
+                                            new_line_map[y_line,dx_k]=new_no
+                                            continue
+                                
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
 
-    # 水平
+    # 水平扩展
     elif y1==y2:
         k_direc=1 if y_d>y1 else -1
         for x_line in range(x_min,x_max+1):
             for y_line in range(y_min,y_max+1):
                 if line_flg[y_line,x_line]==1:
-                    is_line=0
-                    for ddy in range(1,l_d):
+                    is_line=0# 是否标记此点为wall line
+                    # 探测阶段
+                    for ddy in range(1,l_d+1):
                         y_k=y_line+k_direc*ddy
-                        if y_k<0:y_k=0
-                        if y_k>=y:y_k=y-1
+                        if y_k<0 or y_k>=y: break
                         if line_map[y_k,x_line]>0 or img_bool[y_k,x_line]==1:
-                            for dddy in range(ddy+1):
+                            # 充填阶段
+                            for dddy in range(1,ddy+1):
                                 dy_k=y_line+k_direc*dddy
-                                if dy_k<0:dy_k=0
-                                if dy_k>=y:dy_k=y-1
-                                if line_map[y_k,x_line]>0 and K_map[y_k,x_line]!=6 and K_map[y_k,x_line]!=-6:
-                                    is_line=1                       
-                                    K_map[dy_k,x_line]=0
-                                    # line_map[dy_k,x_line]=new_no
-                                    new_line_map[dy_k,x_line]=new_no            
-                                elif  img_bool[y_k,x_line]==1 and new_line_map[dy_k,x_line]==0:
-                                    is_line=1                       
-                                    K_map[dy_k,x_line]=0
-                                    # line_map[dy_k,x_line]=new_no
-                                    new_line_map[dy_k,x_line]=new_no 
+                                if line_map[y_line,x_k]>0:
+                                    # 如果端点直线K相似，直接充填
+                                    if K_map[y_k,x_line]>=-0.176 and K_map[y_k,x_line]<=0.176 :
+                                        is_line=1                                     
+                                        K_map[dy_k,x_line]=0
+                                        new_line_map[dy_k,x_line]=new_no
+                                        continue
+                                # 如果是预测墙体区域
+                                if img_bool[y_k,x_line]==1:
+                                    # 如果是未生长区域，直接充填
+                                    if new_line_map[dy_k,x_line]==0 :
+                                        is_line=1                                     
+                                        K_map[dy_k,x_line]=0
+                                        new_line_map[dy_k,x_line]=new_no
+                                        continue
+                                    # 如果是生长区域，K相似时可以充填
+                                    else:
+                                        if K_map[dy_k,x_line]>=-0.176  or K_map[dy_k,x_line]<=0.176 :
+                                            is_line=1                                     
+                                            K_map[dy_k,x_line]=0
+                                            new_line_map[dy_k,x_line]=new_no
+                                            continue
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
+    
     # 斜边扩展
     else:
-        pass
+        xk_direc=1 if x_d>x1 else -1
+        yk_direc=1 if y_d>y1 else -1
+        dk=-1/k_line
+        dx=(l_d**2/(1+dk**2))**0.5
+        for x_line in range(x_min,x_max+1):
+            for y_line in range(y_min,y_max+1):
+                if line_flg[y_line,x_line]==1:
+                    is_line=0 # 是否标记此点为wall line
+                    # 确定过此点的直线方程
+                    db=y_line-dk*x_line
+                    # 确定探测端点
+                    x_k=x_line+xk_direc*dx
+                    y_k=dk*x_k+db
+                    x_k,y_k=int(x_k),int(y_k)
+                    # 绘制探测线段
+                    detection_line=np.zeros((y,x),np.uint8)
+                    cv2.line(detection_line, (x_line, y_line), (int(x_k),int(y_k)),1, 1)
+
+                    for ddx in range(1,int(dx)+1):
+                        dx_k=x_line+xk_direc*ddx
+                        dy_k=dk*dx_k+db
+                        if dx_k<0 or dx_k>=x:break# or dy_k<0 or dy_k>=y:break
+                        # is_fill=0
+                        for detec_y in range(0,y):
+                            if detection_line[detec_y,int(dx_k)]==1 :
+                                if line_map[detec_y,int(dx_k)]>0 or img_bool[detec_y,int(dx_k)]==1:
+                                    # ROI区域
+                                    de_x_min=int(min(x_line,dx_k))
+                                    if de_x_min<0:de_x_min=0
+                                    de_x_max=int(max(x_line,dx_k))
+                                    if de_x_max>=x:de_x_max=x
+                                    de_y_min=int(min(y_line,dy_k))
+                                    if de_y_min<0:de_y_min=0
+                                    de_y_max=int(max(y_line,dy_k))
+                                    if de_y_max>=y:de_y_max=y
+                                    # print(x)
+                                    # print(x_line,dx_k)
+                                    # print(de_x_min,de_x_max)
+
+                                    for de_x in range(de_x_min,de_x_max):
+                                        for de_y in range(de_y_min,de_y_max):
+                                            # print(de_y,de_x)
+                                            if detection_line[de_y,de_x]==1:
+                                                if line_map[de_y,de_x]>0 or img_bool[de_y,de_x]==1:
+                                                    pass
+
+
+
+                    
+
+                    
+
+
+
 
 color_b=[255,0,0] # K:-6_-2
 color_g=[0,255,0] # K:-2_2
