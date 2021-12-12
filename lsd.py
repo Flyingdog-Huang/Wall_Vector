@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-# from pylsd.lsd import lsd
+from pylsd.lsd import lsd
 import math
 
 # load img data
@@ -18,6 +18,7 @@ img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # detect line
 # # HoughP_line
 # lines_houghp=cv2.HoughLinesP(img_canny,1,np.pi/180,80,30,10)
+
 # LSD
 # img_dline=img_gray.copy()
 # lines_lsd=lsd(img_dline)
@@ -103,11 +104,12 @@ line_map=np.zeros((y,x),np.uint16) # save no(1,2,3...) of wall line, 0-not wall
 # k_max=0
 
 # max/min K -- +-tan80
-max_k=6 # tan80
-min_k=-6 # -tan80
+max_k=5.67 # tan80
+min_k=-5.67 # -tan80
 
 # no of wall line
 no_line=0
+
 
 # filter wall lines
 for line in lines_fastLSD:
@@ -186,37 +188,33 @@ for line in lines_fastLSD:
     mask_p=max(mask1_p,mask2_p)
 
     if (mask1_p+mask2_p)>(thr_mp*2) and ((mask1_p-mask2_p)/mask_p)**2>(thr_dis**2): # True:
-        # add wall lines
-        no_line+=1 # add no of wall line
-        wall_line=[x1,y1,x2,y2]
-        wall_lines.append(wall_line)
-        # print('wall-line',line)
+        # num of wall line
+        no_line+=1 
 
         # # draw wall lines
         # cv2.line(img_wall, (x2, y2), (x1,y1),(0,0,255), 1)
 
-        # get direction
-        direc_line=[x1,y1,x5,y5] if mask1_p>mask2_p else [x1,y1,x3,y3]
-        direc_lines.append(direc_line)
-        # print(direc_line)
-
-        # get k
-        k=max_k
+        # get k - wall line
+        k_wallLine=None
         if x1==x2:
-            k=max_k
+            k_wallLine=6
         elif y1==y2:
-            k=0
+            k_wallLine=0
         else:
-            k=(line[0][1]-line[0][3])/(line[0][0]-line[0][2])  # (y1-y2)/(x1-x2)
+            k_wallLine=(line[0][1]-line[0][3])/(line[0][0]-line[0][2])  # (y1-y2)/(x1-x2)
             # k_2=k_2**2
         # print(k_2)
-        if k>max_k:
-            k=max_k
-        if k<min_k: # tan100
-            k=min_k
-        # if k_2<999999:
-        #     k_max=max(k_2,k_max)
-        k_lines.append(k)
+        if k_wallLine>max_k or k_wallLine<min_k:
+            k_wallLine=6
+            x1=int((x1+x2)/2)
+            x2=x1
+
+        if k_wallLine<=0.176 and k_wallLine>=-0.176:
+            k_wallLine=0 
+            y1=int((y1+y2)/2)
+            y2=y1
+
+        k_lines.append(k_wallLine)
         # print('k',k)
 
         # bool wall direction
@@ -253,23 +251,19 @@ for line in lines_fastLSD:
         line_flg=np.zeros((y,x),np.uint8)
         cv2.line(line_flg, (x2, y2), (x1,y1),1, 1)
 
-        x_min=x1
-        x_max=x2
-        if x1>x2:
-            x_min=x2
-            x_max=x1
-        y_min=y1
-        y_max=y2
-        if y1>y2:
-            y_min=y2
-            y_max=y1
+        x_min=min(x1,x2)
+        x_max=max(x1,x2)
+        
+        y_min=min(y1,y2)
+        y_max=max(y1,y2)
+        
         for y_line in range(y_min,y_max+1):
             for x_line in range(x_min,x_max+1):
                 if line_flg[y_line,x_line]==1:
                     if line_map[y_line,x_line]==0:
                         line_map[y_line,x_line]=no_line
                         # print('k',k)
-                        K_map[y_line,x_line]=k
+                        K_map[y_line,x_line]=k_wallLine
                     else:
                         # keep longer line k
                         l_now=(x1-x2)**2+(y1-y2)**2
@@ -279,12 +273,23 @@ for line in lines_fastLSD:
                         if l_now>l_befor:
                             line_map[y_line,x_line]=no_line
                             # print('k',k)
-                            K_map[y_line,x_line]=k
+                            K_map[y_line,x_line]=k_wallLine
                         
                         # print('len(k_lines)',len(k_lines))
                         # print('line_map[y_line,x_line]',line_map[y_line,x_line])
                         # K_map[y_line,x_line]=k_lines[line_map[y_line,x_line]-1]
         
+        
+        # add wall lines
+        wall_line=[x1,y1,x2,y2]
+        wall_lines.append(wall_line)
+        # print('wall-line',line)
+
+        # get direction
+        direc_line=[x1,y1,x5,y5] if mask1_p>mask2_p else [x1,y1,x3,y3]
+        direc_lines.append(direc_line)
+        # print(direc_line)
+
         # print('line_map:',line_map[y_min:y_max+1,x_min:x_max+1])
         # print('k map-B:',K_map[y_min:y_max+1,x_min:x_max+1,0])
         # print('k map-G:',K_map[y_min:y_max+1,x_min:x_max+1,1])
@@ -329,9 +334,13 @@ for line in lines_fastLSD:
 # print(len(k_lines))
 # print('k_lines',k_lines)
 
- 
-l_d=20 # 探测区域长度
-new_line_map=np.zeros((y,x),np.uint16) # save new no(1,2,3...) of wall line, 0-not wall
+# 探测区域长度 
+l_d=20 
+# save new no(1,2,3...) of wall line, 0-not wall
+new_line_map=np.zeros((y,x),np.uint16) 
+# save new k wall line
+k_new_wallLine=[]
+
 # create k map
 for i in range(len(wall_lines)):
     x1,y1,x2,y2=wall_lines[i]
@@ -377,7 +386,7 @@ for i in range(len(wall_lines)):
                                 dx_k=x_line+k_direc*dddx
                                 if line_map[y_line,x_k]>0:
                                     # 如果端点直线K相似，直接充填
-                                    if K_map[y_line,x_k]>=5.67 or K_map[y_line,x_k]<=-5.64 :
+                                    if K_map[y_line,x_k]>=5.67 or K_map[y_line,x_k]<=-5.67 :
                                         is_line=1                                     
                                         K_map[y_line,dx_k]=6
                                         new_line_map[y_line,dx_k]=new_no
@@ -392,7 +401,7 @@ for i in range(len(wall_lines)):
                                         continue
                                     # 如果是生长区域，K相似时可以充填
                                     else:
-                                        if K_map[y_line,dx_k]>=6 or K_map[y_line,dx_k]<=-6 :
+                                        if K_map[y_line,dx_k]>=5.67 or K_map[y_line,dx_k]<=-5.67 :
                                             is_line=1                                     
                                             K_map[y_line,dx_k]=6
                                             new_line_map[y_line,dx_k]=new_no
@@ -485,19 +494,60 @@ for i in range(len(wall_lines)):
                                     for de_x in range(de_x_min,de_x_max):
                                         for de_y in range(de_y_min,de_y_max):
                                             # print(de_y,de_x)
-                                            if detection_line[de_y,de_x]==1:
-                                                if line_map[de_y,de_x]>0 or img_bool[de_y,de_x]==1:
-                                                    pass
+                                            if detection_line[de_y,de_x]==1 and de_y!=y_line and de_x!=x_line:
+                                                
+                                                k_now=k_line
+                                                tan_k_p10_down=1-k_now*0.176
+                                                tan_k_n10_down=1+k_now*0.176
+                                                tan_k_p10=None
+                                                tan_k_n10=None
+                                                if tan_k_p10_down==0:
+                                                    tan_k_p10=6
+                                                else:
+                                                    tan_k_p10=(k_now+0.176)/tan_k_p10_down
+                                                if tan_k_n10_down==0:
+                                                    tan_k_n10=6
+                                                else:
+                                                    tan_k_n10=(k_now-0.176)/tan_k_n10_down
+
+                                                if line_map[detec_y,int(dx_k)]>0 :
+                                                    k_detect=K_map[detec_y,int(dx_k)]
+                                                    if k_detect<=tan_k_p10 and k_detect>=tan_k_n10:
+                                                        is_line=1
+                                                    if k_detect<=tan_k_n10 and k_detect>=tan_k_p10:
+                                                        is_line=1
+                                                    if is_line==1:
+                                                        K_map[de_y,de_x]=k_now
+                                                        if k_now not in k_new_wallLine:
+                                                            k_new_wallLine.append(k_now)
+                                                        new_line_map[de_y,de_x]=new_no
+                                                        continue
+                                                if img_bool[detec_y,int(dx_k)]==1 :
+                                                    if new_line_map[de_y,de_x]==0:
+                                                        is_line=1
+                                                        K_map[de_y,de_x]=k_now
+                                                        if k_now not in k_new_wallLine:
+                                                            k_new_wallLine.append(k_now)
+                                                        new_line_map[de_y,de_x]=new_no
+                                                        continue
+                                                    else:
+                                                        k_detect=K_map[de_y,de_x]
+                                                        if k_detect<=tan_k_p10 and k_detect>=tan_k_n10:
+                                                            is_line=1
+                                                        if k_detect<=tan_k_n10 and k_detect>=tan_k_p10:
+                                                            is_line=1
+                                                        if is_line==1:
+                                                            K_map[de_y,de_x]=k_now
+                                                            if k_now not in k_new_wallLine:
+                                                                k_new_wallLine.append(k_now)
+                                                            new_line_map[de_y,de_x]=new_no
+                                                            continue
+
+                    if is_line==1:
+                        new_line_map[y_line,x_line]=new_no
 
 
-
-                    
-
-                    
-
-
-
-
+# show k feature map
 color_b=[255,0,0] # K:-6_-2
 color_g=[0,255,0] # K:-2_2
 color_r=[0,0,255] # K:2_6
@@ -514,6 +564,76 @@ for i in range(x):
                 color=color_r
         K_feature_map[j,i,:]=color
 
+
+def isPointIn(point_x,point_y,x_b_min=0,x_b_max=x,y_b_min=0,y_b_max=y):
+    '''判断点是否在某一区域内'''
+    if point_x>=x_b_min and point_x<x_b_max and point_y>=y_b_min and point_y<y_b_max:
+        return True
+    else:
+        return False
+
+def k_RG(point_x,point_y,k_stand,k_rg_map,k_size=3,thr=0.5):
+    '''区域生长
+    8邻域
+    0.5'''
+    k_b1,k_b2=None,None
+    # 计算阈值
+    if k_stand<=0.176 and k_stand>=-0.176:
+        k_stand=0
+        k_b1,k_b2=-0.176,0.176
+    elif k_stand<=-5.67 or k_stand>=5.67:
+        k_stand=6
+        k_b1,k_b2=-0.176,0.176
+    else:
+        pass
+
+    x_nears=[]
+    y_nears=[]
+    for i in range(k_size):
+        for j in range(k_size):
+            x_near=point_x+i-1
+            y_near=point_y+i-1
+            if isPointIn(x_near,y_near):
+                x_nears.append(x_near)
+                y_nears.append(y_near)
+    
+    num_near=len(x_nears)
+    num_isWallLine=0
+    for i in range(num_near):
+        x_near,y_near=x_nears[i],y_nears[j]
+        if new_line_map[y_near,x_near]>0:
+            num_isWallLine+=1
+    if num_isWallLine>=int(num_near*thr):
+        k_near=[]
+        k_near_num=[]
+        for i in range(num_near):
+            x_near,y_near=x_nears[i],y_nears[j]
+
+
+
+        k_point=K_map[x_near,y_near]
+
+
+
+
+    if new_line_map[point_y,point_x]>0:
+        k_point=K_map[point_y,point_x]
+        if k_stand==0:
+            if k_point<=0.176 and k_point>=-0.176:
+                k_rg_map[point_y,point_x]=255
+        elif k_stand==6:
+            if k_point<=-5.67 or k_point>=5.67:
+                k_rg_map[point_y,point_x]=255
+
+    
+
+
+# 首先将垂直和水平的区域分割出来
+k_rg=0
+rg_map=np.zeros((y,x),np.uint8)
+for x_rg in range(x):
+    for y_rg in range(y):
+        if 
 
 '''  
 
