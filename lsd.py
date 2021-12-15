@@ -570,6 +570,8 @@ for i in range(len(wall_lines)):
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
 
+print('k_new_wallLine',k_new_wallLine)
+
 
 # show k feature map
 color_b=[255,0,0] # K:-6_-2
@@ -696,12 +698,67 @@ for x_rg in range(x):
         if new_line_map[y_rg,x_rg]>0 and K_map[y_rg,x_rg]==k_rg :
             k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map1,k_rg_flag_map=rg_flag_map1)
 
+
+# 基于斜率K的坐标正-反变换
+def pointChange(x_point,y_point,k_rec,is_toK=True):
+    cos_a=(1/k_rec**2)**0.5
+    sin_a=k_rec*cos_a
+
+    if is_toK is False:
+        sin_a=-sin_a
+    new_x_point=x_point*cos_a+y_point*sin_a
+    new_y_point=y_point*cos_a-x_point*sin_a
+    return int(new_x_point),int(new_y_point)
+
+
 # 基于斜率K的方向矩形拟合优化
-def findKminRect(k,cnt):
-    
+def findKminRect(k_rec,cnt):
+    bbox_points=[] # [point1,point2,point3,point4]
+
+    if k_rec==0 or k_rec==6:
+        x_rec,y_rec,w_rec,h_rec=cv2.boundingRect(cnt)
+        x1,y1=x_rec,y_rec
+        x2,y2=x_rec+w_rec,y_rec
+        x3,y3=x_rec+w_rec,y_rec+h_rec
+        x4,y4=x_rec,y_rec+h_rec
+    else:
+        # 坐标转换
+        new_cnt=[]
+
+        for point in cnt:
+            new_point=[]
+            x_point,y_point=point[0]
+            new_x_point,new_y_point=pointChange(x_point,y_point,k_rec)
+
+            new_point=[new_x_point,new_y_point]
+            new_cnt.append(new_point)
+
+        new_cnt=np.array(new_cnt)
+        new_cnt=new_cnt[:,np.newaxis,:]
+
+        # 在K坐标系下拟合rec
+        x_rec,y_rec,w_rec,h_rec=cv2.boundingRect(cnt)
+        x1,y1=x_rec,y_rec
+        x2,y2=x_rec+w_rec,y_rec
+        x3,y3=x_rec+w_rec,y_rec+h_rec
+        x4,y4=x_rec,y_rec+h_rec
+
+        # 转换回原始坐标系
+        x1,y1=pointChange(x1,y1,k_rec,is_toK=False)
+        x2,y2=pointChange(x2,y2,k_rec,is_toK=False)
+        x3,y3=pointChange(x3,y3,k_rec,is_toK=False)
+        x4,y4=pointChange(x4,y4,k_rec,is_toK=False)
+
+
+
+    bbox_points=[x1,y1,x2,y2,x3,y3,x4,y4]
+    return bbox_points
+
+
 
 
 new_wall_mask=np.zeros((y,x),np.uint8)
+
 # 拟合轮廓成矩形
 contours, _ = cv2.findContours(rg_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 contours1, _ = cv2.findContours(rg_map1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -716,10 +773,20 @@ for cnt in contours1:
     points=np.int0(points)
     cv2.drawContours(new_wall_mask,[points],0,255,-1)
         
+# 其余K值
+for k_rg in k_new_wallLine:
+    k_rg=6
+    rg_map=np.zeros((y,x),np.uint8)
+    rg_flag_map=np.zeros((y,x),np.uint8)
 
+    for x_rg in range(x):
+        for y_rg in range(y):
+            if new_line_map[y_rg,x_rg]>0 and K_map[y_rg,x_rg]==k_rg :
+                k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map,k_rg_flag_map=rg_flag_map)
 
 
 ''' 
+
 # cv2.imshow('gray',img_gray)
 # cv2.imshow('houghp',img_houghp)
 # cv2.imshow('fast LSD',img_fastLSD)

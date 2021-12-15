@@ -3,20 +3,32 @@ import numpy as np
 from pylsd.lsd import lsd
 import math
 
+path_read='./predict/'
+img_name='1_mask.png'
+img=cv2.imread(path_read+img_name)
+img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+contours, _ = cv2.findContours(img_gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+# for cnt in contours:
+#     print(cnt)
+
+print(type(contours))
+print(type(contours[0]))
+print(type(contours[0][0]))
+
+'''
 d=[4,3,2,1,4]
 
 print(d.index(max(d)))
 
-'''
+
 # load img data
-path_read='./predict/'
+
 # path_write='../do/'
-img_name='1_img.png'
-img=cv2.imread(path_read+img_name)
+
 img_pre=cv2.imread(path_read+'1_pre.png')
 
 # process img
-img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
 
 # LSD
 img_dline=img_gray.copy()
