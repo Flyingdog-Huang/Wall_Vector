@@ -338,8 +338,10 @@ for line in lines_fastLSD:
 l_d=20 
 # save new no(1,2,3...) of wall line, 0-not wall
 new_line_map=np.zeros((y,x),np.uint16) 
-# save new k wall line
+# save new k wall line(除了水平和竖直以外)
 k_new_wallLine=[]
+# save distance  from pix point to wall lines
+dis_k_line_map=np.zeros((y,x),np.float16)
 
 # create k map
 for i in range(len(wall_lines)):
@@ -390,6 +392,8 @@ for i in range(len(wall_lines)):
                                         is_line=1                                     
                                         K_map[y_line,dx_k]=6
                                         new_line_map[y_line,dx_k]=new_no
+                                        if dis_k_line_map[y_line,dx_k]==0 or (dis_k_line_map[y_line,dx_k]>0 and dis_k_line_map[y_line,dx_k]>dddx):
+                                            dis_k_line_map[y_line,dx_k]=dddx
                                         continue
                                 # 如果是预测墙体区域
                                 if img_bool[y_line,x_k]==1:
@@ -398,14 +402,17 @@ for i in range(len(wall_lines)):
                                         is_line=1                                     
                                         K_map[y_line,dx_k]=6
                                         new_line_map[y_line,dx_k]=new_no
+                                        dis_k_line_map[y_line,dx_k]=dddx
                                         continue
-                                    # 如果是生长区域，K相似时可以充填
+                                    # 如果是生长区域，K相似+距离最近时 = 可以充填
                                     else:
                                         if K_map[y_line,dx_k]>=5.67 or K_map[y_line,dx_k]<=-5.67 :
-                                            is_line=1                                     
-                                            K_map[y_line,dx_k]=6
-                                            new_line_map[y_line,dx_k]=new_no
-                                            continue
+                                            if dis_k_line_map[y_line,dx_k]>0 and dis_k_line_map[y_line,dx_k]>dddx:
+                                                is_line=1                                     
+                                                K_map[y_line,dx_k]=6
+                                                new_line_map[y_line,dx_k]=new_no
+                                                dis_k_line_map[y_line,dx_k]=dddx
+                                                continue
                                 
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
@@ -431,6 +438,8 @@ for i in range(len(wall_lines)):
                                         is_line=1                                     
                                         K_map[dy_k,x_line]=0
                                         new_line_map[dy_k,x_line]=new_no
+                                        if dis_k_line_map[dy_k,x_line]==0 or (dis_k_line_map[dy_k,x_line]>0 and dis_k_line_map[dy_k,x_line]>dddy):
+                                            dis_k_line_map[dy_k,x_line]=dddy
                                         continue
                                 # 如果是预测墙体区域
                                 if img_bool[y_k,x_line]==1:
@@ -439,14 +448,17 @@ for i in range(len(wall_lines)):
                                         is_line=1                                     
                                         K_map[dy_k,x_line]=0
                                         new_line_map[dy_k,x_line]=new_no
+                                        dis_k_line_map[dy_k,x_line]=dddy
                                         continue
-                                    # 如果是生长区域，K相似时可以充填
+                                    # 如果是生长区域，K相似+dis更小=可以充填
                                     else:
                                         if K_map[dy_k,x_line]>=-0.176  or K_map[dy_k,x_line]<=0.176 :
-                                            is_line=1                                     
-                                            K_map[dy_k,x_line]=0
-                                            new_line_map[dy_k,x_line]=new_no
-                                            continue
+                                            if dis_k_line_map[dy_k,x_line]>0 and dis_k_line_map[dy_k,x_line]>dddy:
+                                                dis_k_line_map[dy_k,x_line]=dddy
+                                                is_line=1                                     
+                                                K_map[dy_k,x_line]=0
+                                                new_line_map[dy_k,x_line]=new_no
+                                                continue
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
     
@@ -495,7 +507,9 @@ for i in range(len(wall_lines)):
                                         for de_y in range(de_y_min,de_y_max):
                                             # print(de_y,de_x)
                                             if detection_line[de_y,de_x]==1 and de_y!=y_line and de_x!=x_line:
-                                                
+                                                # 计算距离值
+                                                distance_point=((de_y-y_line)**2+(de_x-x_line)**2)**0.5
+
                                                 k_now=k_line
                                                 tan_k_p10_down=1-k_now*0.176
                                                 tan_k_n10_down=1+k_now*0.176
@@ -509,38 +523,48 @@ for i in range(len(wall_lines)):
                                                     tan_k_n10=6
                                                 else:
                                                     tan_k_n10=(k_now-0.176)/tan_k_n10_down
-
+                                                # 如果探测区域有直线存在
                                                 if line_map[detec_y,int(dx_k)]>0 :
                                                     k_detect=K_map[detec_y,int(dx_k)]
                                                     if k_detect<=tan_k_p10 and k_detect>=tan_k_n10:
                                                         is_line=1
                                                     if k_detect<=tan_k_n10 and k_detect>=tan_k_p10:
                                                         is_line=1
+                                                    # 且斜率K近似, 可以直接充填
                                                     if is_line==1:
                                                         K_map[de_y,de_x]=k_now
                                                         if k_now not in k_new_wallLine:
                                                             k_new_wallLine.append(k_now)
                                                         new_line_map[de_y,de_x]=new_no
+                                                        # 如此点距离未被标记 or 标记了距离但数值更小, 则直接将距离值充填
+                                                        if dis_k_line_map[de_y,de_x]==0 or (dis_k_line_map[de_y,de_x]>0 and dis_k_line_map[de_y,de_x]>distance_point):
+                                                            dis_k_line_map[de_y,de_x]=distance_point
                                                         continue
+                                                # 如果探测区域有墙体预测区域存在
                                                 if img_bool[detec_y,int(dx_k)]==1 :
+                                                    # 如果是未生长区域，直接充填
                                                     if new_line_map[de_y,de_x]==0:
                                                         is_line=1
                                                         K_map[de_y,de_x]=k_now
                                                         if k_now not in k_new_wallLine:
                                                             k_new_wallLine.append(k_now)
                                                         new_line_map[de_y,de_x]=new_no
+                                                        dis_k_line_map[de_y,de_x]=distance_point
                                                         continue
+                                                    # 如果是生长区域，K相似+dis更小=可以充填
                                                     else:
                                                         k_detect=K_map[de_y,de_x]
-                                                        if k_detect<=tan_k_p10 and k_detect>=tan_k_n10:
-                                                            is_line=1
-                                                        if k_detect<=tan_k_n10 and k_detect>=tan_k_p10:
-                                                            is_line=1
+                                                        if dis_k_line_map[de_y,de_x]>0 and dis_k_line_map[de_y,de_x]>distance_point:
+                                                            if k_detect<=tan_k_p10 and k_detect>=tan_k_n10:
+                                                                is_line=1
+                                                            if k_detect<=tan_k_n10 and k_detect>=tan_k_p10:
+                                                                is_line=1
                                                         if is_line==1:
                                                             K_map[de_y,de_x]=k_now
                                                             if k_now not in k_new_wallLine:
                                                                 k_new_wallLine.append(k_now)
                                                             new_line_map[de_y,de_x]=new_no
+                                                            dis_k_line_map[de_y,de_x]=distance_point
                                                             continue
 
                     if is_line==1:
@@ -564,85 +588,148 @@ for i in range(x):
                 color=color_r
         K_feature_map[j,i,:]=color
 
-
+ 
 def isPointIn(point_x,point_y,x_b_min=0,x_b_max=x,y_b_min=0,y_b_max=y):
-    '''判断点是否在某一区域内'''
+    #判断点是否在某一区域内
     if point_x>=x_b_min and point_x<x_b_max and point_y>=y_b_min and point_y<y_b_max:
         return True
     else:
         return False
 
-def k_RG(point_x,point_y,k_stand,k_rg_map,k_size=3,thr=0.5):
-    '''区域生长
-    8邻域
-    0.5'''
-    k_b1,k_b2=None,None
-    # 计算阈值
+def is_k_in_range(k_now,k_stand):
+    #判断斜率k是否在范围内
+    # 水平
     if k_stand<=0.176 and k_stand>=-0.176:
-        k_stand=0
-        k_b1,k_b2=-0.176,0.176
+        if k_now>=-0.176 and k_now<=0.176:
+            return True
+    # 竖直
     elif k_stand<=-5.67 or k_stand>=5.67:
-        k_stand=6
-        k_b1,k_b2=-0.176,0.176
+        if k_now<=-5.67 or k_now>=5.67:
+            return True
+    # 其他
     else:
         pass
+    return False
 
-    x_nears=[]
-    y_nears=[]
-    for i in range(k_size):
-        for j in range(k_size):
-            x_near=point_x+i-1
-            y_near=point_y+i-1
-            if isPointIn(x_near,y_near):
-                x_nears.append(x_near)
-                y_nears.append(y_near)
-    
-    num_near=len(x_nears)
-    num_isWallLine=0
-    for i in range(num_near):
-        x_near,y_near=x_nears[i],y_nears[j]
-        if new_line_map[y_near,x_near]>0:
-            num_isWallLine+=1
-    if num_isWallLine>=int(num_near*thr):
-        k_near=[]
-        k_near_num=[]
+
+def k_RG(point_x,point_y,k_stand,k_rg_map,k_rg_flag_map,k_size=3,thr=0.5):
+    # 区域生长
+    # 8邻域
+    # 0.5
+    # 判断是否已经遍历过
+    if k_rg_flag_map[point_y,point_x]!=255:
+        k_rg_flag_map[point_y,point_x]=255 # 标记已经遍历
+        k_b1,k_b2=None,None
+        # 计算阈值
+        if k_stand<=0.176 and k_stand>=-0.176:
+            k_stand=0
+            k_b1,k_b2=-0.176,0.176
+        elif k_stand<=-5.67 or k_stand>=5.67:
+            k_stand=6
+            k_b1,k_b2=-0.176,0.176
+        else:
+            pass
+
+        x_nears=[]
+        y_nears=[]
+        for i in range(k_size):
+            for j in range(k_size):
+                x_near=point_x+i-1
+                y_near=point_y+i-1
+                if isPointIn(x_near,y_near):
+                    x_nears.append(x_near)
+                    y_nears.append(y_near)
+        
+        num_near=len(x_nears)
+        num_isWallLine=0
         for i in range(num_near):
             x_near,y_near=x_nears[i],y_nears[j]
+            if new_line_map[y_near,x_near]>0 and is_k_in_range(K_map[y_near,x_near],k_stand):
+                num_isWallLine+=1
+        if num_isWallLine>=int(num_near*thr):
+            k_near_list=[]
+            k_near_num_list=[]
+            for i in range(num_near):
+                x_near,y_near=x_nears[i],y_nears[j]
+                if new_line_map[y_near,x_near]>0:
+                    if K_map[y_near,x_near] not in k_near_list:
+                        k_near_list.append(K_map[y_near,x_near])
+                        k_near_num_list.append(0)
+                    else:
+                        k_index=k_near_list.index(K_map[y_near,x_near])
+                        k_near_num_list[k_index]+=1
+            k_num_max=max(k_near_num_list)
+            k_list=[]
+            for k_i in range(len(k_near_list)):
+                if k_near_num_list[k_i]==k_num_max:
+                    k_list.append(k_near_list[k_i])
+            
+            for k_i in k_list:
+                if is_k_in_range(k_i,k_stand):
+                    k_rg_map[point_y,point_x]=255
+                    break
 
+            if k_rg_map[point_y,point_x]==255:
+                for i in range(num_near):
+                    x_near,y_near=x_nears[i],y_nears[j]
+                    if k_rg_flag_map[y_near,x_near]!=255:
+                        k_RG(x_near,y_near,k_stand=k_stand,k_rg_map=k_rg_map,k_rg_flag_map=k_rg_flag_map,k_size=k_size,thr=thr)
 
-
-        k_point=K_map[x_near,y_near]
-
-
-
-
-    if new_line_map[point_y,point_x]>0:
-        k_point=K_map[point_y,point_x]
-        if k_stand==0:
-            if k_point<=0.176 and k_point>=-0.176:
-                k_rg_map[point_y,point_x]=255
-        elif k_stand==6:
-            if k_point<=-5.67 or k_point>=5.67:
-                k_rg_map[point_y,point_x]=255
-
-    
 
 
 # 首先将垂直和水平的区域分割出来
 k_rg=0
 rg_map=np.zeros((y,x),np.uint8)
+rg_flag_map=np.zeros((y,x),np.uint8)
+
 for x_rg in range(x):
     for y_rg in range(y):
-        if 
+        if new_line_map[y_rg,x_rg]>0 and K_map[y_rg,x_rg]==k_rg :
+            k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map,k_rg_flag_map=rg_flag_map)
 
-'''  
+k_rg=6
+rg_map1=np.zeros((y,x),np.uint8)
+rg_flag_map1=np.zeros((y,x),np.uint8)
 
+for x_rg in range(x):
+    for y_rg in range(y):
+        if new_line_map[y_rg,x_rg]>0 and K_map[y_rg,x_rg]==k_rg :
+            k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map1,k_rg_flag_map=rg_flag_map1)
+
+# 基于斜率K的方向矩形拟合优化
+def findKminRect(k,cnt):
+    
+
+
+new_wall_mask=np.zeros((y,x),np.uint8)
+# 拟合轮廓成矩形
+contours, _ = cv2.findContours(rg_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+contours1, _ = cv2.findContours(rg_map1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+for cnt in contours:
+    rect= cv2.minAreaRect(cnt)
+    points=cv2.boxPoints(rect)
+    points=np.int0(points)
+    cv2.drawContours(new_wall_mask,[points],0,255,-1)
+for cnt in contours1:
+    rect= cv2.minAreaRect(cnt)
+    points=cv2.boxPoints(rect)
+    points=np.int0(points)
+    cv2.drawContours(new_wall_mask,[points],0,255,-1)
+        
+
+
+
+''' 
 # cv2.imshow('gray',img_gray)
 # cv2.imshow('houghp',img_houghp)
 # cv2.imshow('fast LSD',img_fastLSD)
 # cv2.imshow('LSD',img_lsd)
 # cv2.imshow('img_bool',img_bool)
 '''
+
+cv2.imshow('new_wall_mask',new_wall_mask)
+cv2.imshow('rg_map1',rg_map1)
+cv2.imshow('rg_map',rg_map)
 cv2.imshow('wall-line',img_wall)
 cv2.imshow('K_feature_map',K_feature_map)
 cv2.waitKey(0)

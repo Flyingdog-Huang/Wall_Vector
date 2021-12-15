@@ -3,6 +3,11 @@ import numpy as np
 from pylsd.lsd import lsd
 import math
 
+d=[4,3,2,1,4]
+
+print(d.index(max(d)))
+
+'''
 # load img data
 path_read='./predict/'
 # path_write='../do/'
@@ -12,10 +17,11 @@ img_pre=cv2.imread(path_read+'1_pre.png')
 
 # process img
 img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
 # LSD
 img_dline=img_gray.copy()
 lines_lsd=lsd(img_dline)
-'''
+
 for dline in lines_lsd:
     print(dline)
     x0, y0, x1, y1=map(int, dline[:4])
