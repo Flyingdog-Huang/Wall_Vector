@@ -1,14 +1,20 @@
 import cv2
 import numpy as np
 from pylsd.lsd import lsd
+import math
 
-def 
+# load img data
+path_read='./predict/'
+# path_write='../do/'
+img_name= '3.jpg' #  '1_img.png'
+img=cv2.imread(path_read+img_name)
+img_pre=cv2.imread(path_read+'3_pre_unet.png') # 1_pre
 
-if __name__ == '__main__':
-    # load data
-    # find lines
-    # get wall lines
-    # creat K**2 map
-    # fit rectangle -- get width of wall
-    # fit line for each rectangle
-    # get s-e points
+
+# process img
+img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+# Fast LSD
+lsd_dec=cv2.ximgproc.createFastLineDetector()
+lines_fastLSD=lsd_dec.detect(img_gray)
+
