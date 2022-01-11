@@ -7,13 +7,14 @@ import cv2
 import numpy as np
 from pylsd.lsd import lsd
 import math
+import json
 
 # load img data
 path_read='./predict/'
 # path_write='../do/'
-img_name= '3.jpg' #  '1_img.png'
+img_name='1_img.png' #   '3.jpg'
 img=cv2.imread(path_read+img_name)
-img_pre=cv2.imread(path_read+'3_pre_unet.png') # 1_pre
+img_pre=cv2.imread(path_read+'1_pre.png') # 3_pre_unet.png
 
 # process img
 img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -125,9 +126,11 @@ k_min_vertical=-5.76
 
 # 定义斜率K的相似性
 def is_K_same(k1,k2):
+    k1=k1 if k1!=np.inf else 999999
+    k2=k2 if k2!=np.inf else 999999
     # 夹角在10°内
     tan_a=(k1-k2)/(1+k1*k2+0.0001)
-    if tan_a**2<=math.tan(10/180*math.pi):
+    if tan_a**2<=math.tan(10/180*math.pi)**2:
         return True
     return False
 
@@ -245,6 +248,7 @@ for line in lines_fastLSD:
         #         y1=int((y1+y2)/2)
         #         y2=y1
 
+        # print('k_wallLine - ',k_wallLine)
         k_lines.append(k_wallLine)
         # print('k',k)
 
@@ -373,6 +377,8 @@ new_line_map=np.zeros((y,x),np.uint16)
 
 # save distance  from pix point to wall lines
 dis_k_line_map=np.zeros((y,x),np.float16)
+# 保存对应wall line的长度
+len_dis_k_line_map=np.zeros((y,x),np.float16)
 
 # 点距探测
 def point_detect(x_point,y_point):
@@ -390,6 +396,10 @@ def point_detect(x_point,y_point):
                 # 若探测到wall line 
                 if line_map[y_detect,x_detect]>0:
                     dis_k_line_map[y_point,x_point]=r_detect # 赋值距离map
+                    no_dis_wall_line=line_map[y_detect,x_detect]-1
+                    this_wall_line=wall_lines[no_dis_wall_line]
+                    this_len=((this_wall_line[0]-this_wall_line[2])**2+(this_wall_line[1]-this_wall_line[3])**2)**0.5
+                    len_dis_k_line_map[y_point,x_point]=this_len
                     new_line_map[y_point,x_point]=line_map[y_detect,x_detect] # 赋值生长的new line map
                     K_map[y_point,x_point]=k_lines[line_map[y_detect,x_detect]-1] # 赋值生长的K map
                     is_detected=True
@@ -425,6 +435,7 @@ for i in range(len(wall_lines)):
     x1,y1,x2,y2=wall_lines[i] # 提取wall line坐标
     k_line=k_lines[i] # 此条wall line的斜率K
     x1,y1,x_d,y_d=direc_lines[i] # 方向线坐标，以point1为起点
+    len_wall_line=((x1-x2)**2+(y1-y2)**2)**0.5
 
     # draw wall lines
     # 绘制原始wall line
@@ -498,15 +509,15 @@ for i in range(len(wall_lines)):
                                         new_line_map[y_line,dx_k]=new_no # 赋值此点wall line序号
                                         continue
                                     
-                                    # 如果端点直线不相似
-                                    else:
-                                        # 如果是未生长区域，直接充填
-                                        if new_line_map[y_line,dx_k]==0  and line_map[y_line,dx_k]==0:
-                                            is_line=1                                     
-                                            K_map[y_line,dx_k]=max_k
-                                            new_line_map[y_line,dx_k]=new_no
-                                            dis_k_line_map[y_line,dx_k]=dddx
-                                            continue
+                                    # # 如果端点直线不相似
+                                    # else:
+                                    #     # 如果是未生长区域，直接充填
+                                    #     if new_line_map[y_line,dx_k]==0  and line_map[y_line,dx_k]==0:
+                                    #         is_line=1                                     
+                                    #         K_map[y_line,dx_k]=max_k
+                                    #         new_line_map[y_line,dx_k]=new_no
+                                    #         dis_k_line_map[y_line,dx_k]=dddx
+                                    #         continue
 
                                     #     # 如果是生长区域
                                     #     else:
@@ -522,7 +533,8 @@ for i in range(len(wall_lines)):
 
                                 # 如果是预测墙体区域 
                                 # 如果是由对边线充填的形式，则不充填
-                                if img_bool[y_line,x_k]==1:
+                                k_detect=K_map[y_line,x_k] # 探测点wall line斜率
+                                if img_bool[y_line,x_k]==1 and is_K_same(k_line,k_detect):
                                     
                                     # 如果是未生长区域，直接充填
                                     if new_line_map[y_line,dx_k]==0 :
@@ -530,18 +542,27 @@ for i in range(len(wall_lines)):
                                         new_line_map[y_line,dx_k]=new_no                                     
                                         K_map[y_line,dx_k]=max_k
                                         dis_k_line_map[y_line,dx_k]=dddx
+                                        len_dis_k_line_map[y_line,dx_k]=len_wall_line
                                         continue
                                     
                                     # 如果是生长区域，没有被相似成对直线情况充填时+距离最近时 = 可以充填
                                     else:
                                         if is_fill_by_same_line[y_line,dx_k]==0:
-
-                                            if dis_k_line_map[y_line,dx_k]>0 and dis_k_line_map[y_line,dx_k]>dddx:
+                                            if len_dis_k_line_map[y_line,dx_k]<len_wall_line:
                                                 is_line=1                                     
                                                 K_map[y_line,dx_k]=max_k
                                                 new_line_map[y_line,dx_k]=new_no
                                                 dis_k_line_map[y_line,dx_k]=dddx
+                                                len_dis_k_line_map[y_line,dx_k]=len_wall_line
                                                 continue
+                                            else:
+                                                if dis_k_line_map[y_line,dx_k]>0 and dis_k_line_map[y_line,dx_k]>dddx :
+                                                    is_line=1                                     
+                                                    K_map[y_line,dx_k]=max_k
+                                                    new_line_map[y_line,dx_k]=new_no
+                                                    dis_k_line_map[y_line,dx_k]=dddx
+                                                    len_dis_k_line_map[y_line,dx_k]=len_wall_line
+                                                    continue
                                 
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
@@ -596,15 +617,15 @@ for i in range(len(wall_lines)):
                                         new_line_map[dy_k,x_line]=new_no
                                         continue
 
-                                    # 如果端点直线不相似
-                                    else:
-                                        #  如果是未生长区域，直接充填
-                                        if new_line_map[dy_k,x_line]==0  and line_map[dy_k,x_line]==0:
-                                            is_line=1                                     
-                                            K_map[dy_k,x_line]=0
-                                            new_line_map[dy_k,x_line]=new_no
-                                            dis_k_line_map[dy_k,x_line]=dddy
-                                            continue
+                                    # # 如果端点直线不相似
+                                    # else:
+                                    #     #  如果是未生长区域，直接充填
+                                    #     if new_line_map[dy_k,x_line]==0  and line_map[dy_k,x_line]==0:
+                                    #         is_line=1                                     
+                                    #         K_map[dy_k,x_line]=0
+                                    #         new_line_map[dy_k,x_line]=new_no
+                                    #         dis_k_line_map[dy_k,x_line]=dddy
+                                    #         continue
 
                                     #     # 如果是生长区域，没有被相似成对直线情况充填时+dis更小=可以充填
                                     #     else:
@@ -620,7 +641,8 @@ for i in range(len(wall_lines)):
 
                                 # 如果是预测墙体区域
                                 # 如果是由对边线充填的形式，则不充填
-                                if img_bool[y_k,x_line]==1:
+                                k_detect=K_map[y_k,x_line] # 探测点wall line斜率
+                                if img_bool[y_k,x_line]==1 and is_K_same(k_line,k_detect):
 
                                     # 如果是未生长区域，直接充填
                                     if new_line_map[dy_k,x_line]==0 :
@@ -628,19 +650,29 @@ for i in range(len(wall_lines)):
                                         new_line_map[dy_k,x_line]=new_no                                     
                                         K_map[dy_k,x_line]=0
                                         dis_k_line_map[dy_k,x_line]=dddy
+                                        len_dis_k_line_map[dy_k,x_line]=len_wall_line
                                         continue
 
                                     # 如果是生长区域，没有被相似成对直线情况充填时+dis更小=可以充填
                                     else:
                                         if is_fill_by_same_line[dy_k,x_line]==0:
-
-                                            if dis_k_line_map[dy_k,x_line]>0 and dis_k_line_map[dy_k,x_line]>dddy:
-                                                
+                                            if len_dis_k_line_map[dy_k,x_line]<len_wall_line:
+                                                len_dis_k_line_map[dy_k,x_line]=len_wall_line
                                                 is_line=1
                                                 new_line_map[dy_k,x_line]=new_no                                     
                                                 K_map[dy_k,x_line]=0
                                                 dis_k_line_map[dy_k,x_line]=dddy
                                                 continue
+
+                                            else:
+                                                if dis_k_line_map[dy_k,x_line]>0 and dis_k_line_map[dy_k,x_line]>dddy :
+                                                
+                                                    len_dis_k_line_map[dy_k,x_line]=len_wall_line
+                                                    is_line=1
+                                                    new_line_map[dy_k,x_line]=new_no                                     
+                                                    K_map[dy_k,x_line]=0
+                                                    dis_k_line_map[dy_k,x_line]=dddy
+                                                    continue
                     
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
@@ -767,15 +799,15 @@ for i in range(len(wall_lines)):
                                                             new_line_map[de_y,de_x]=new_no
                                                             continue
 
-                                                        # 如果端点直线不相似
-                                                        else:
-                                                            # 如果是未生长区域 + 此点不为直线，直接充填
-                                                            if new_line_map[de_y,de_x]==0 and line_map[de_y,de_x]==0:
-                                                                is_line=1 # 此点保存 
-                                                                K_map[de_y,de_x]=k_now
-                                                                new_line_map[de_y,de_x]=new_no
-                                                                dis_k_line_map[de_y,de_x]=distance_point
-                                                                continue
+                                                        # # 如果端点直线不相似
+                                                        # else:
+                                                        #     # 如果是未生长区域 + 此点不为直线，直接充填
+                                                        #     if new_line_map[de_y,de_x]==0 and line_map[de_y,de_x]==0:
+                                                        #         is_line=1 # 此点保存 
+                                                        #         K_map[de_y,de_x]=k_now
+                                                        #         new_line_map[de_y,de_x]=new_no
+                                                        #         dis_k_line_map[de_y,de_x]=distance_point
+                                                        #         continue
                                                             
                                                         #     # 如果是生长区域
                                                         #     else:
@@ -790,7 +822,8 @@ for i in range(len(wall_lines)):
                                                         #                 continue
 
                                                     # 如果探测区域有墙体预测区域存在
-                                                    if img_bool[detec_y,int(dx_k)]==1 :
+                                                    k_detect=K_map[detec_y,int(dx_k)] # 获取斜率K
+                                                    if img_bool[detec_y,int(dx_k)]==1 and is_K_same(k_line,k_detect):
 
                                                         # 如果是未生长区域，直接充填
                                                         if new_line_map[de_y,de_x]==0:
@@ -798,45 +831,70 @@ for i in range(len(wall_lines)):
                                                             K_map[de_y,de_x]=k_now
                                                             new_line_map[de_y,de_x]=new_no
                                                             dis_k_line_map[de_y,de_x]=distance_point
+                                                            len_dis_k_line_map[de_y,de_x]=len_wall_line
                                                             continue
 
                                                         # 如果是生长区域，没有被相似成对直线情况充填时 + dis更小=可以充填
                                                         else:
                                                             if is_fill_by_same_line[de_y,de_x]==0:
-                                                                
-                                                                if dis_k_line_map[de_y,de_x]>0 and dis_k_line_map[de_y,de_x]>distance_point:
+                                                                if len_dis_k_line_map[de_y,de_x]<len_wall_line:
                                                                     is_line=1    
                                                                     K_map[de_y,de_x]=k_now
                                                                     new_line_map[de_y,de_x]=new_no
                                                                     dis_k_line_map[de_y,de_x]=distance_point
+                                                                    len_dis_k_line_map[de_y,de_x]=len_wall_line
                                                                     continue
+                                                                else:
+                                                                    if dis_k_line_map[de_y,de_x]>0 and dis_k_line_map[de_y,de_x]>distance_point:
+                                                                        is_line=1    
+                                                                        K_map[de_y,de_x]=k_now
+                                                                        new_line_map[de_y,de_x]=new_no
+                                                                        dis_k_line_map[de_y,de_x]=distance_point
+                                                                        len_dis_k_line_map[de_y,de_x]=len_wall_line
+                                                                        continue
 
                     if is_line==1:
                         new_line_map[y_line,x_line]=new_no
                         dis_k_line_map[y_line,x_line]=0 
-
 
 # show k feature map
 color_b=[255,0,0] # K:-6_-2
 color_g=[0,255,0] # K:-2_2
 color_r=[0,0,255] # K:2_6
 color_w=[255,255,255] # 显示水平和竖直
+# find special k
+find_k_thr=5.8
+color_s=[55,155,255] # 显示特别
 
 for i in range(x):
     for j in range(y):
         color=[0,0,0]
         if new_line_map[j][i]>0:
-            if K_map[j][i]==max_k or K_map[j][i]==0: #(K_map[j][i]>=5.67 or K_map[j][i]<=-5.67) or (K_map[j][i]>=-0.176 and K_map[j][i]<=0.176):
+            if is_K_same(K_map[j,i],max_k):# or is_K_same(K_map[j,i],0): #(K_map[j][i]>=5.67 or K_map[j][i]<=-5.67) or (K_map[j][i]>=-0.176 and K_map[j][i]<=0.176):
                 color=color_w
-            elif K_map[j][i]<-2:
-                color=color_b
-            elif K_map[j][i]>=-2 and K_map[j][i]<=2:
-                color=color_g
+            # elif K_map[j][i]<-2:
+            #     color=color_b
+            # elif K_map[j][i]>=-2 and K_map[j][i]<=2:
+            #     color=color_g
+            # elif K_map[j][i]>2 and K_map[j][i]<find_k_thr:
+            #     color=color_r
             else:
-                color=color_r
+            # # elif is_K_same(K_map[j,i],find_k_thr):
+                color=color_s
         K_feature_map[j,i,:]=color
 
-
+# # # 此时斜率有inf存在
+# # # K_map[np.isinf(K_map)]=max_k
+# for i in range(x):
+#     for j in range(y):
+#         if K_feature_map[j,i,0]==0 and K_feature_map[j,i,1]==0 and K_feature_map[j,i,2]==0 and new_line_map[j][i]>0:
+            
+#             # if K_map[j,i]==np.inf:
+#                 print(K_map[j,i],type(K_map[j,i]))
+#                 # print('here')
+#                 # K_map[j,i]=max_k/1.0
+#                 # print(K_map[j,i],type(K_map[j,i]))
+#                 # print('ok')
 
 
 ######### 区域生长阶段 ############
@@ -854,9 +912,8 @@ def isPointIn(point_x,point_y,x_b_min=0,x_b_max=x,y_b_min=0,y_b_max=y):
 # K list去重
 new_k_list=list(set(k_lines))
 
-
+# 区域生长
 def k_RG(point_x,point_y,k_stand,k_rg_map,k_rg_flag_map,k_size=3,thr=0.5):
-    # 区域生长
     # 8邻域
     # 0.5
     # 判断是否已经遍历过
@@ -874,8 +931,9 @@ def k_RG(point_x,point_y,k_stand,k_rg_map,k_rg_flag_map,k_size=3,thr=0.5):
                     y_nears.append(y_near)
         
         num_near=len(x_nears)
-        print(x_nears,y_nears)
-        # 是否属于K区域
+        # print(x_nears,y_nears)
+
+        # 是否属于k_stand区域
         num_k=0
         num_same_k=0
         for i in range(num_near):
@@ -884,41 +942,132 @@ def k_RG(point_x,point_y,k_stand,k_rg_map,k_rg_flag_map,k_size=3,thr=0.5):
                 num_k+=1
                 if is_K_same(k_stand,K_map[y_near,x_near]): num_same_k+=1
                 
-        is_k_area=False
-        if num_same_k>=int(num_k*thr):
-            is_k_area=True
+        seeds_x=[]
+        seeds_y=[]
+        if num_same_k>=int(num_k*thr) and num_k>=int(num_near*thr):
             k_rg_map[point_y,point_x]=255
-                
+            seeds_x.append(point_x)
+            seeds_y.append(point_y)
         
         # 四周生长
-        if is_k_area:
-            for i in range(num_near):
-                x_near,y_near=x_nears[i],y_nears[i]
-                if k_rg_flag_map[y_near,x_near]!=255:
-                    k_RG(x_near,y_near,k_stand=k_stand,k_rg_map=k_rg_map,k_rg_flag_map=k_rg_flag_map,k_size=k_size,thr=thr)
-       
+        while len(seeds_x)>0:
+            seed_x=seeds_x.pop(0)
+            seed_y=seeds_y.pop(0)
+            for ii in range(k_size):
+                for jj in range(k_size):
+                    seed_x_near=seed_x-1+ii
+                    seed_y_near=seed_y-1+jj
+                    if isPointIn(seed_x_near,seed_y_near) and k_rg_flag_map[seed_y_near,seed_x_near]==0:
+                        k_rg_flag_map[seed_y_near,seed_x_near]=255
+                        is_same_k_flag=False
+                        num_near_seed=0
+                        num_k_seed=0
+                        num_same_k_seed=0
+                        for iii in range(k_size):
+                            for jjj in range(k_size):
+                                seed_x_near_near=seed_x_near-1+iii
+                                seed_y_near_near=seed_y_near-1+jjj
+                                if isPointIn(seed_x_near_near,seed_y_near_near):
+                                    num_near_seed+=1
+                                    if new_line_map[seed_y_near_near,seed_x_near_near]>0:
+                                        num_k_seed+=1
+                                        if is_K_same(k_stand,K_map[seed_y_near_near,seed_x_near_near]):
+                                            num_same_k_seed+=1
+                        if num_same_k_seed>=int(num_k_seed*thr) and num_k_seed>=int(num_near_seed*thr):is_same_k_flag=True
+                        if is_same_k_flag:
+                            k_rg_map[seed_y_near,seed_x_near]=255
+                            seeds_x.append(seed_x_near)
+                            seeds_y.append(seed_y_near)
 
-
-# 首先将垂直和水平的区域分割出来
-k_rg=0
-rg_map=np.zeros((y,x),np.uint8)
+k_rgs=[0,max_k,1,-1]
 rg_flag_map=np.zeros((y,x),np.uint8)
+vector_wall=img_pre.copy()
+new_wall_mask=np.zeros((y,x),np.uint8)
+total_num_wall=0
+API_json=[]
 
-for x_rg in range(x):
-    for y_rg in range(y):
-        if new_line_map[y_rg,x_rg]>0 and is_K_same(K_map[y_rg,x_rg],k_rg) :
-            k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map,k_rg_flag_map=rg_flag_map)
+def campIOU(img_cnt,img_rec):
+    pre_true=img_cnt*img_rec
+    return np.sum(pre_true)/np.sum(img_rec)
 
-k_rg=max_k
-rg_map1=np.zeros((y,x),np.uint8)
-rg_flag_map1=np.zeros((y,x),np.uint8)
+def cnt2img(cnt):
+    new_mask=np.zeros((y,x),np.uint8)
+    cv2.drawContours(new_mask,[cnt],0,1,-1)
+    return new_mask
 
-for x_rg in range(x):
-    for y_rg in range(y):
-        if new_line_map[y_rg,x_rg]>0 and is_K_same(K_map[y_rg,x_rg],k_rg) :
-            k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map1,k_rg_flag_map=rg_flag_map1)
+def points2img(points):
+    new_mask=np.zeros((y,x),np.uint8)
+    cv2.drawContours(new_mask,[points],0,1,-1)
+    return new_mask
 
+for k_rg in k_rgs:
+    rg_map=np.zeros((y,x),np.uint8)
+    for x_rg in range(x):
+        for y_rg in range(y):
+            if new_line_map[y_rg,x_rg]>0 and is_K_same(K_map[y_rg,x_rg],k_rg) :
+                k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map,k_rg_flag_map=rg_flag_map)
+    # 拟合轮廓成矩形
+    contours, _ = cv2.findContours(rg_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # ***基于:轮廓面积>area_thr---过滤杂点
+    for cnt in contours:
+        area=cv2.contourArea(cnt)
+        if area<10:continue
+        wall_vector={}
+        rect= cv2.minAreaRect(cnt)
+        points=cv2.boxPoints(rect)
+        points=np.int0(points)
+        # print('points',points)
+        img_cnt=cnt2img(cnt)
+        img_rec=points2img(points)
+        iou=campIOU(img_cnt,img_rec)
+        wall_vector['area_cnt']=img_cnt.sum()
+        wall_vector['area_rec']=img_rec.sum()
+        wall_vector['area_inter']=(img_cnt*img_rec).sum()
+        wall_vector['iou']=iou
+        print('wall_vector',wall_vector)
+        
+        l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
+        l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
+        width_wall=min(l1,l2)
+        x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
+        y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
+        x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
+        y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
 
+        cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
+        total_num_wall+=1
+        # print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
+        # wall_vector['sPoint']=[x_e_vector,y_e_vector]
+        # wall_vector['ePoint']=[x_s_vector,y_s_vector]
+        # wall_vector['width']=width_wall
+        # wall_vector['height']='default'
+        # wall_vector['isStructural']=True
+        API_json.append(wall_vector)
+        # print('points',points)
+        cv2.drawContours(new_wall_mask,[points],0,255,-1)
+
+# print(API_json)
+# print(json.dumps(API_json))
+# # 首先将垂直和水平的区域分割出来
+# k_rg=max_k
+# rg_map1=np.zeros((y,x),np.uint8)
+# # rg_flag_map1=np.zeros((y,x),np.uint8)
+
+# for x_rg in range(x):
+#     for y_rg in range(y):
+#         if new_line_map[y_rg,x_rg]>0 and is_K_same(K_map[y_rg,x_rg],k_rg) :
+#             k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map1,k_rg_flag_map=rg_flag_map)
+
+# k_rg=2.5
+# rg_map2=np.zeros((y,x),np.uint8)
+# # rg_flag_map1=np.zeros((y,x),np.uint8)
+
+# for x_rg in range(x):
+#     for y_rg in range(y):
+#         if new_line_map[y_rg,x_rg]>0 and is_K_same(K_map[y_rg,x_rg],k_rg) :
+            # k_RG(x_rg,y_rg,k_stand=k_rg,k_rg_map=rg_map2,k_rg_flag_map=rg_flag_map)
+
+'''
 # 基于斜率K的坐标正-反变换
 def pointChange(x_point,y_point,k_rec,is_toK=True):
     cos_a=(1/k_rec**2)**0.5
@@ -975,54 +1124,76 @@ def findKminRect(k_rec,cnt):
     return bbox_points
 
 
-
-vector_wall=img_pre.copy()
-new_wall_mask=np.zeros((y,x),np.uint8)
-total_num_wall=0
-
-# 拟合轮廓成矩形
-contours, _ = cv2.findContours(rg_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-contours1, _ = cv2.findContours(rg_map1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-# ***基于:轮廓面积>area_thr---过滤杂点
-for cnt in contours:
-    rect= cv2.minAreaRect(cnt)
-    points=cv2.boxPoints(rect)
-    points=np.int0(points)
-    # print('points',points)
-    l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
-    l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
-    width_wall=min(l1,l2)
-    x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
-    y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
-    x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
-    y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
-
-    cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
-    total_num_wall+=1
-    print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
-    print('points',points)
-    cv2.drawContours(new_wall_mask,[points],0,255,-1)
-
-for cnt in contours1:
-    rect= cv2.minAreaRect(cnt)
-    points=cv2.boxPoints(rect)
-    points=np.int0(points)
-    l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
-    l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
-    width_wall=min(l1,l2)
-    x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
-    y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
-    x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
-    y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
-
-    cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
-    total_num_wall+=1
-    print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
-    print('points',points)
-    cv2.drawContours(new_wall_mask,[points],0,255,-1)
-
 '''
+
+# # 拟合轮廓成矩形
+# contours, _ = cv2.findContours(rg_map, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+# contours1, _ = cv2.findContours(rg_map1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+# contours2, _ = cv2.findContours(rg_map2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+# # ***基于:轮廓面积>area_thr---过滤杂点
+# for cnt in contours:
+#     area=cv2.contourArea(cnt)
+#     if area<10:continue
+#     rect= cv2.minAreaRect(cnt)
+#     points=cv2.boxPoints(rect)
+#     points=np.int0(points)
+#     # print('points',points)
+#     l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
+#     l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
+#     width_wall=min(l1,l2)
+#     x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
+#     y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
+#     x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
+#     y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
+
+#     cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
+#     total_num_wall+=1
+#     print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
+#     # print('points',points)
+#     cv2.drawContours(new_wall_mask,[points],0,255,-1)
+
+# for cnt in contours1:
+#     area=cv2.contourArea(cnt)
+#     if area<10:continue
+#     rect= cv2.minAreaRect(cnt)
+#     points=cv2.boxPoints(rect)
+#     points=np.int0(points)
+#     l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
+#     l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
+#     width_wall=min(l1,l2)
+#     x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
+#     y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
+#     x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
+#     y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
+
+#     cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
+#     total_num_wall+=1
+#     print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
+#     # print('points',points)
+#     cv2.drawContours(new_wall_mask,[points],0,255,-1)
+'''
+for cnt in contours2:
+    area=cv2.contourArea(cnt)
+    if area<10:continue
+    rect= cv2.minAreaRect(cnt)
+    points=cv2.boxPoints(rect)
+    points=np.int0(points)
+    l1=max(int(((points[0][0]-points[1][0])**2)**0.5),int(((points[0][1]-points[1][1])**2)**0.5))
+    l2=max(int(((points[2][0]-points[1][0])**2)**0.5),int(((points[2][1]-points[1][1])**2)**0.5))
+    width_wall=min(l1,l2)
+    x_e_vector=(points[0][0]+points[1][0])/2 if width_wall==l1 else (points[2][0]+points[1][0])/2
+    y_e_vector=(points[0][1]+points[1][1])/2 if width_wall==l1 else (points[2][1]+points[1][1])/2
+    x_s_vector=(points[2][0]+points[3][0])/2 if width_wall==l1 else (points[0][0]+points[3][0])/2
+    y_s_vector=(points[2][1]+points[3][1])/2 if width_wall==l1 else (points[0][1]+points[3][1])/2
+
+    cv2.line(vector_wall, (int(x_e_vector), int(y_e_vector)), (int(x_s_vector),int(y_s_vector)),(0,0,255), 1)
+    total_num_wall+=1
+    print('{0} - wall line: [[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]={1}'.format(total_num_wall,[[x_e_vector,y_e_vector],[x_s_vector,y_s_vector],width_wall]))
+    # print('points',points)
+    cv2.drawContours(new_wall_mask,[points],0,255,-1)
+
+
 other_k_map=np.zeros((y,x),np.uint8)
 
 # 其余K值
@@ -1064,15 +1235,17 @@ for k_rg in new_k_list:
 # cv2.imshow('LSD',img_lsd)
 # cv2.imshow('img_bool',img_bool)
 cv2.imshow('fast LSD',img_fastLSD)
-cv2.imshow('rg_map1',rg_map1)
-cv2.imshow('rg_map',rg_map)
+
 cv2.imshow('other_k_map',other_k_map)
-'''
+cv2.imshow('rg_map2',rg_map2)
 
-cv2.imshow('K_feature_map',K_feature_map)
 
-cv2.imshow('new_wall_mask',new_wall_mask)
-cv2.imshow('vector_wall',vector_wall)
-cv2.imshow('wall-line',img_wall)
+# cv2.imshow('rg_map_999',rg_map1)
+# cv2.imshow('rg_map_0',rg_map)
+# cv2.imshow('wall-line',img_wall)
+# cv2.imshow('new_wall_mask',new_wall_mask)
+# cv2.imshow('vector_wall',vector_wall)
+# cv2.imshow('K_feature_map',K_feature_map)
 
-cv2.waitKey(0)
+# cv2.waitKey(0)
+if total_num_wall:print('ok')'''
